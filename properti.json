@@ -1,0 +1,16 @@
+{
+    "properti": [
+        {
+            "id_properti": 1,
+            "wilayan_properti": "buah batu",
+            "harga_per_m2": 170000,
+            "kenaikan_harga": 4000
+        },
+        {
+            "id_properti": 2,
+            "wilayan_properti": "lembang",
+            "harga_per_m2": 200000,
+            "kenaikan_harga": 5000
+        }
+    ]
+}
