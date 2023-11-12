@@ -1,6 +1,6 @@
 import jwt
 
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from passlib.hash import bcrypt
 from tortoise import fields 
@@ -9,7 +9,7 @@ from tortoise.contrib.pydantic import pydantic_model_creator
 from tortoise.models import Model 
 
 app = FastAPI()
-
+auth_router = APIRouter(tags=["Authentication"])
 JWT_SECRET = 'myjwtsecret'
 
 class User(Model):
