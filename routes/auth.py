@@ -1,81 +1,119 @@
-import jwt
+from fastapi import APIRouter, FastAPI, status, Depends, HTTPException
+from typing import Annotated, Any, Union
+from db import cursor, conn
+from datetime import timedelta, datetime
+import os
+from jose import jwt, JWTError
+from passlib.context import CryptContext
+from models.users import UserIn, UserOut, SystemUser, Token, TokenPayload
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
+from pydantic import ValidationError
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from passlib.hash import bcrypt
-from tortoise import fields 
-from tortoise.contrib.fastapi import register_tortoise
-from tortoise.contrib.pydantic import pydantic_model_creator
-from tortoise.models import Model 
-
-app = FastAPI()
-auth_router = APIRouter(tags=["Authentication"])
-JWT_SECRET = 'myjwtsecret'
-
-class User(Model):
-    id = fields.IntField(pk=True)
-    username = fields.CharField(50, unique=True)
-    password_hash = fields.CharField(128)
-
-    def verify_password(self, password):
-        return bcrypt.verify(password, self.password_hash)
-
-User_Pydantic = pydantic_model_creator(User, name='User')
-UserIn_Pydantic = pydantic_model_creator(User, name='UserIn', exclude_readonly=True)
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
-
-async def authenticate_user(username: str, password: str):
-    user = await User.get(username=username)
-    if not user:
-        return False 
-    if not user.verify_password(password):
-        return False
-    return user 
-
-@app.post('/token')
-async def generate_token(form_data: OAuth2PasswordRequestForm = Depends()):
-    user = await authenticate_user(form_data.username, form_data.password)
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail='Invalid username or password'
-        )
-
-    user_obj = await User_Pydantic.from_tortoise_orm(user)
-
-    token = jwt.encode(user_obj.dict(), JWT_SECRET)
-
-    return {'access_token' : token, 'token_type' : 'bearer'}
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-        user = await User.get(id=payload.get('id'))
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail='Invalid username or password'
-        )
-
-    return await User_Pydantic.from_tortoise_orm(user)
-
-
-@app.post('/users', response_model=User_Pydantic)
-async def create_user(user: UserIn_Pydantic):
-    user_obj = User(username=user.username, password_hash=bcrypt.hash(user.password_hash))
-    await user_obj.save()
-    return await User_Pydantic.from_tortoise_orm(user_obj)
-
-@app.get('/users/me', response_model=User_Pydantic)
-async def get_user(user: User_Pydantic = Depends(get_current_user)):
-    return user    
-
-register_tortoise(
-    app, 
-    db_url='sqlite://db.sqlite3',
-    modules={'models': ['auth']},
-    generate_schemas=True,
-    add_exception_handlers=True
+authRouter = APIRouter(
+    tags=["auth"]
 )
+
+ALGORITHM = 'HS256'
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+# JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY")
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+# REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
+
+bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
+oauth_bearer = OAuth2PasswordBearer(tokenUrl='/login', scheme_name="JWT")
+
+
+# buat token
+def createAccessToken(subject: Union[str, Any], expires_delta: int = None) -> str:
+    if expires_delta is not None:
+        expires_delta = datetime.utcnow() + expires_delta
+    else:
+        expires_delta = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    enc = {"exp": expires_delta, "sub": str(subject)}
+    encode_jwt = jwt.encode(enc, JWT_SECRET_KEY, ALGORITHM)
+    return encode_jwt
+
+# cek validasi
+async def get_current_user(token: str = Depends(oauth_bearer)) -> SystemUser:
+    try:
+        payload = jwt.decode(
+            token, JWT_SECRET_KEY, algorithms=[ALGORITHM]
+        )
+        token_data = TokenPayload(**payload)
+        
+        if datetime.fromtimestamp(token_data.exp) < datetime.now():
+            raise HTTPException(
+                status_code = status.HTTP_401_UNAUTHORIZED,
+                detail="Token expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    except(jwt.JWTError, ValidationError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    username: str = token_data.sub
+    if username is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user.")
+    
+    return username
+
+
+
+@authRouter.post("/signup")
+async def createNewUser(data: UserIn):
+    query = "SELECT username FROM users WHERE username=%s;"
+    cursor.execute(query, (data.username,))
+    user = cursor.fetchone()
+
+    if user is not None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User with this username already exist")
+    
+    hashed_pass = bcrypt_context.hash(data.password)
+
+    query = "INSERT INTO users (username, password) VALUES (%s, %s)"
+    cursor.execute(query, (data.username, data.password,))
+    conn.commit()
+
+    return {
+        "success": True,
+        "message": f"User dengan username {data.username} berhasil dibuat",
+        "code": 200
+    }
+
+    
+
+@authRouter.post("/login", response_model=Token)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    query = "SELECT * FROM users WHERE username=%s;"
+    cursor.execute(query, (form_data.username,))
+    user = cursor.fetchone()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect username or password")
+    
+    hashed_pass = user[3] #password
+    if not bcrypt_context.verify(form_data.password, hashed_pass):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect username or password")
+    
+    return {
+        "access_token": createAccessToken(user[2]),
+        "token_type": "bearer"
+    }
+
+
+
+# cek dependensi ke login
+@authRouter.get("/MyInfo")
+async def getMyInfo(user: UserIn = Depends(get_current_user)):
+    query = "SELECT username FROM users WHERE username=%s;"
+    cursor.execute(query, (user.username,))
+    info = cursor.fetchone()
+    return {
+        "success": True,
+        "code": 200,
+        "Info": info
+    }

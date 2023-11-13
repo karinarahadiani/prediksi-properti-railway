@@ -1,139 +1,127 @@
-from fastapi import APIRouter, HTTPException
-from models.properti import Item
+from fastapi import APIRouter, Depends, HTTPException, status
+from passlib.hash import bcrypt
 import json
-from tortoise.contrib.pydantic import pydantic_model_creator
-from passlib.hash import bcrypt
-from tortoise import fields 
-from tortoise.models import Model 
-import jwt
+import io
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from passlib.hash import bcrypt
-from tortoise import fields 
-from tortoise.contrib.fastapi import register_tortoise
-from tortoise.contrib.pydantic import pydantic_model_creator
-from tortoise.models import Model 
+from db import conn, cursor
+from models.properti import Item
 
-class User(Model):
-    id = fields.IntField(pk=True)
-    username = fields.CharField(50, unique=True)
-    password_hash = fields.CharField(128)
-
-    def verify_password(self, password):
-        return bcrypt.verify(password, self.password_hash)
-	
-User_Pydantic = pydantic_model_creator(User, name='User')
-UserIn_Pydantic = pydantic_model_creator(User, name='UserIn', exclude_readonly=True)
-
-with open("data/properti.json","r") as read_file: 
-	data = json.load(read_file)
-
+#define routing 
 properti_router = APIRouter(tags=["properti"])
 kenaikan_router = APIRouter(tags=["kenaikan"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='token')
-
-async def authenticate_user(username: str, password: str):
-    user = await User.get(username=username)
-    if not user:
-        return False 
-    if not user.verify_password(password):
-        return False
-    return user 
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
-        user = await User.get(id=payload.get('id'))
-    except:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, 
-            detail='Invalid username or password'
-        )
-
-    return await User_Pydantic.from_tortoise_orm(user)
-
+#properti route
+#get all the properti list
 @properti_router.get('/properti')
 async def read_all_properti():
-	return data['properti']
+	query = "SELECT * from properti;"
+	cursor.execute(query)
+	data_properti = cursor.fetchall()
 
+	if not data_properti: 
+		raise HTTPException(
+		status_code=404, detail=f'Properti not found')
+	
+	return {
+		"success" : True, 
+		"message" : "success", 
+		"code" : 200, 
+		"response" : data_properti
+	}
+
+#get properti list with item id
 @properti_router.get('/properti/{item_id}')
 async def read_properti(item_id: int):
-	for properti_item in data['properti']:
-		print(properti_item)
-		if properti_item['id_properti'] == item_id:
-			return properti_item
-	raise HTTPException(
-		status_code=404, detail=f'properti not found'
-	)
+	query = "SELECT * FROM properti WHERE id=%s;"
+	cursor.execute(query,(item_id,))
+	data_properti = cursor.fetchone()
 
+	if not data_properti: 
+		raise HTTPException(
+		status_code=404, detail=f'Properti not found')
+	
+	return {
+		"success" : True, 
+		"message" : "success", 
+		"code" : 200, 
+		"response" : data_properti
+	}
+
+#add new properti item
 @properti_router.post('/properti')
 async def add_properti(item: Item):
-	item_dict = item.dict()
-	item_found = False
-	for properti_item in data['properti']:
-		if properti_item['id_properti'] == item_dict['id_properti'] and properti_item['wilayah_properti'] == item_dict['wilayah_properti']:
-			item_found = True
-			return "Properti ID "+str(item_dict['id_properti'])+" exists."
-	
-	if not item_found:
-		data['properti'].routeend(item_dict)
-		with open(json_filename,"w") as write_file:
-			json.dump(data, write_file)
+	query = "INSERT INTO properti (nama_wilayah, harga_per_m2, kenaikan_harga) VALUES (%s, %s, %s)"
+	cursor.execute(query, (item.nama_wilayah,item.harga_per_m2, item.kenaikan_harga,))
+	conn.commit()
+	id = cursor.lastrowid
 
-		return item_dict
-	raise HTTPException(
-		status_code=404, detail=f'item not found'
-	)
+	return {
+		"success" : True, 
+		"message" : "success", 
+		"code" : 200, 
+		"id" : id
+	}
 
-@properti_router.put('/properti')
-async def update_properti(item: Item):
-	item_dict = item.dict()
-	item_found = False
-	for properti_idx, properti_item in enumerate(data['properti']):
-		if properti_item['id_properti'] == item_dict['id_properti']:
-			item_found = True
-			data['properti'][properti_idx]=item_dict
-			
-			with open(json_filename,"w") as write_file:
-				json.dump(data, write_file)
-			return "updated"
-	
-	if not item_found:
-		return "Properti ID not found."
-	raise HTTPException(
-		status_code=404, detail=f'item not found'
-	)
+# update properti item
+@properti_router.put('/properti/{item_id}')
+async def update_properti(item_id: int, item: Item):
+    query = "SELECT id FROM properti WHERE id = %s"
+    cursor.execute(query, (item_id,))
+    data_properti = cursor.fetchone()
+
+    if not data_properti:
+        raise HTTPException(
+            status_code=404, detail=f'Properti not found')
+
+    query = "UPDATE properti SET nama_wilayah=%s, harga_per_m2=%s, kenaikan_harga=%s WHERE id=%s"
+    cursor.execute(query, (item.nama_wilayah,item.harga_per_m2, item.kenaikan_harga,item_id,))
+    conn.commit()
+
+    return {
+        "success": True,
+        "message": "success",
+        "code": 200,
+        "id": item_id
+    }
+
 
 @properti_router.delete('/properti/{item_id}')
 async def delete_properti(item_id: int):
+	query = "SELECT id FROM properti WHERE id =%s"
+	cursor.execute(query, (item_id,))
+	data_properti = cursor.fetchone()
 
-	item_found = False
-	for properti_idx, properti_item in enumerate(data['properti']):
-		if properti_item['id_properti'] == item_id:
-			item_found = True
-			data['properti'].pop(properti_idx)
-			
-			with open(json_filename,"w") as write_file:
-				json.dump(data, write_file)
-			return "updated"
+	if not data_properti: 
+		raise HTTPException(
+		status_code=404, detail=f'Properti not found')
 	
-	if not item_found:
-		return "Properti ID not found."
-	raise HTTPException(
-		status_code=404, detail=f'item not found'
-	)
+	query = "DELETE FROM properti WHERE id=%s"
+	cursor.execute(query, (item_id,))
+	conn.commit()
 
-@kenaikan_router.get('/kenaikan/{item_id}/{jangka_tahun}/{luas_tanah}', response_model =User_Pydantic)
-async def read_kenaikan(item_id: int, jangka_tahun: int, luas_tanah: int, user: User_Pydantic = Depends(get_current_user)):
-    for properti_item in data['properti']:
-        if properti_item['id_properti'] == item_id:
-            kenaikan_harga = properti_item.get('kenaikan_harga')
-            perhitungan = ((properti_item.get('kenaikan_harga')* luas_tanah * jangka_tahun * 1.03) + (properti_item.get('harga_per_m2')*luas_tanah))
-            if kenaikan_harga is not None:
-                message = f"harga prediksi properti dalam {jangka_tahun} tahun adalah : {perhitungan:.2f}"
-                return message
-            else:
-                raise HTTPException(status_code=500, detail="Invalid data: kenaikan_harga is None")
-    raise HTTPException(status_code=404, detail=f'properti not found')
+	return {
+		"success" : True, 
+		"message" : "success", 
+		"code" : 200, 
+		"id" : item_id
+	}
+	
+
+@kenaikan_router.get('/kenaikan/{item_id}/{jangka_tahun}/{luas_tanah}')
+async def read_kenaikan(item_id: int, jangka_tahun: int, luas_tanah: int):
+    # Assuming you have a table named 'properti' with columns 'id_properti', 'harga_per_m2', 'kenaikan_harga'
+    query = "SELECT harga_per_m2, kenaikan_harga FROM properti WHERE id=%s;"
+    cursor.execute(query, (item_id,))
+    properti_data = cursor.fetchone()
+
+    if not properti_data:
+        raise HTTPException(status_code=404, detail=f'properti not found')
+
+    harga_per_m2, kenaikan_harga = properti_data
+
+    if kenaikan_harga is not None:
+        perhitungan = ((kenaikan_harga * luas_tanah * jangka_tahun * 1.03) + (harga_per_m2 * luas_tanah))
+        message = f"harga prediksi properti dalam {jangka_tahun} tahun adalah : {perhitungan:.2f}"
+        return {"success": True, "message": "success", "code": 200, "response": message}
+    else:
+        raise HTTPException(status_code=500, detail="Invalid data: kenaikan_harga is None")
