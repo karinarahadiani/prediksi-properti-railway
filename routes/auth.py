@@ -14,14 +14,26 @@ authRouter = APIRouter(
 )
 
 ALGORITHM = 'HS256'
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-# JWT_REFRESH_SECRET_KEY = os.getenv("JWT_REFRESH_SECRET_KEY")
+JWT_SECRET_KEY = 'lala'
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-# REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 bcrypt_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
 oauth_bearer = OAuth2PasswordBearer(tokenUrl='/login', scheme_name="JWT")
 
+password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(password: str, hashed_pass: str) -> bool:
+    return password_context.verify(password, hashed_pass)
+
+def createAccessToken(subject: Union[str, Any], expires_delta: int = None) -> str:
+    if expires_delta is not None:
+        expires_delta = datetime.utcnow() + expires_delta
+    else:
+        expires_delta = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+
+    enc = {"exp": expires_delta, "sub": str(subject)}
+    encode_jwt = jwt.encode(enc, JWT_SECRET_KEY, ALGORITHM)
+    return encode_jwt
 
 # buat token
 def createAccessToken(subject: Union[str, Any], expires_delta: int = None) -> str:
@@ -74,8 +86,8 @@ async def createNewUser(data: UserIn):
     
     hashed_pass = bcrypt_context.hash(data.password)
 
-    query = "INSERT INTO users (username, password) VALUES (%s, %s)"
-    cursor.execute(query, (data.username, data.password,))
+    query = "INSERT INTO users (username, password, hash) VALUES (%s, %s, %s)"
+    cursor.execute(query, (data.username, data.password, hashed_pass))
     conn.commit()
 
     return {
@@ -84,20 +96,24 @@ async def createNewUser(data: UserIn):
         "code": 200
     }
 
-    
 
-@authRouter.post("/login", response_model=Token)
+@authRouter.post('/login', summary="Create access and refresh tokens for user", response_model=Token)
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     query = "SELECT * FROM users WHERE username=%s;"
     cursor.execute(query, (form_data.username,))
     user = cursor.fetchone()
-
     if user is None:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect username or password")
-    
-    hashed_pass = user[3] #password
-    if not bcrypt_context.verify(form_data.password, hashed_pass):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Incorrect username or password")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect email or password"
+        )
+
+    hashed_pass = user[3]
+    if not verify_password(form_data.password, hashed_pass):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Incorrect email or password"
+        )
     
     return {
         "access_token": createAccessToken(user[2]),
@@ -105,8 +121,6 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     }
 
 
-
-# cek dependensi ke login
 @authRouter.get("/MyInfo")
 async def getMyInfo(user: UserIn = Depends(get_current_user)):
     query = "SELECT username FROM users WHERE username=%s;"

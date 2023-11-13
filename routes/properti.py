@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from passlib.hash import bcrypt
-import json
-import io
 
+from routes.auth import get_current_user
 from db import conn, cursor
 from models.properti import Item
+from models.users import UserIn
 
 #define routing 
 properti_router = APIRouter(tags=["properti"])
@@ -108,7 +108,7 @@ async def delete_properti(item_id: int):
 	
 
 @kenaikan_router.get('/kenaikan/{item_id}/{jangka_tahun}/{luas_tanah}')
-async def read_kenaikan(item_id: int, jangka_tahun: int, luas_tanah: int):
+async def read_kenaikan(item_id: int, jangka_tahun: int, luas_tanah: int, user: UserIn = Depends(get_current_user)):
     # Assuming you have a table named 'properti' with columns 'id_properti', 'harga_per_m2', 'kenaikan_harga'
     query = "SELECT harga_per_m2, kenaikan_harga FROM properti WHERE id=%s;"
     cursor.execute(query, (item_id,))

@@ -8,7 +8,7 @@ app = FastAPI()
 # Include routers in the app
 app.include_router(properti_router, prefix="/properti")
 app.include_router(kenaikan_router, prefix="/kenaikan")
-app.include_router(authRouter, prefix="/authentification")
+app.include_router(authRouter)
 
 if __name__ == "__main__":
     import uvicorn
