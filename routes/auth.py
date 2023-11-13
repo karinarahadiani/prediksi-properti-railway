@@ -2,7 +2,6 @@ from fastapi import APIRouter, FastAPI, status, Depends, HTTPException
 from typing import Annotated, Any, Union
 from db import cursor, conn
 from datetime import timedelta, datetime
-import os
 from jose import jwt, JWTError
 from passlib.context import CryptContext
 from models.users import UserIn, UserOut, SystemUser, Token, TokenPayload
@@ -35,18 +34,6 @@ def createAccessToken(subject: Union[str, Any], expires_delta: int = None) -> st
     encode_jwt = jwt.encode(enc, JWT_SECRET_KEY, ALGORITHM)
     return encode_jwt
 
-# buat token
-def createAccessToken(subject: Union[str, Any], expires_delta: int = None) -> str:
-    if expires_delta is not None:
-        expires_delta = datetime.utcnow() + expires_delta
-    else:
-        expires_delta = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
-    enc = {"exp": expires_delta, "sub": str(subject)}
-    encode_jwt = jwt.encode(enc, JWT_SECRET_KEY, ALGORITHM)
-    return encode_jwt
-
-# cek validasi
 async def get_current_user(token: str = Depends(oauth_bearer)) -> SystemUser:
     try:
         payload = jwt.decode(
@@ -66,7 +53,6 @@ async def get_current_user(token: str = Depends(oauth_bearer)) -> SystemUser:
             detail="Could not validate credentials",
             headers={"WWW-Authenticate": "Bearer"},
         )
-
     username: str = token_data.sub
     if username is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user.")
@@ -120,7 +106,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         "token_type": "bearer"
     }
 
-
+'''
 @authRouter.get("/MyInfo")
 async def getMyInfo(user: UserIn = Depends(get_current_user)):
     query = "SELECT username FROM users WHERE username=%s;"
@@ -131,3 +117,4 @@ async def getMyInfo(user: UserIn = Depends(get_current_user)):
         "code": 200,
         "Info": info
     }
+    '''
