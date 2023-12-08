@@ -10,6 +10,8 @@ from models.users import UserIn
 properti_router = APIRouter(tags=["properti"])
 kenaikan_router = APIRouter(tags=["kenaikan"])
 
+friend_url = "http://virtualhoteltourservices.c4aaf6hnfxhhbtb5.southeastasia.azurecontainer.io:8000"
+
 #properti route
 #get all the properti list
 @properti_router.get('/properti')
@@ -129,8 +131,8 @@ async def read_kenaikan(item_id: int, jangka_tahun: int, luas_tanah: int, user: 
 @kenaikan_router.get('/lihat_properti')
 async def gambar_properti(user: UserIn = Depends(get_current_user)): 
 	data = {
-        "username": "angela",  
-        "password": "angelag20123"  
+        "username": "karina",  
+        "password": "karinakarina"  
     }
 	response = requests.post(f"{friend_url}/token", data=data)
 	token = response.json()["access_token"]
