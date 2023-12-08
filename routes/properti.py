@@ -9,7 +9,6 @@ from models.users import UserIn
 #define routing 
 properti_router = APIRouter(tags=["properti"])
 kenaikan_router = APIRouter(tags=["kenaikan"])
-frontend = APIRouter(tags=["👉🏻 bit.ly/FrontendHomeely"])
 
 #properti route
 #get all the properti list
