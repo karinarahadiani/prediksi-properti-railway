@@ -10,7 +10,7 @@ from models.users import UserIn
 properti_router = APIRouter(tags=["properti"])
 kenaikan_router = APIRouter(tags=["kenaikan"])
 
-friend_url = "http://virtualhoteltourservices.c4aaf6hnfxhhbtb5.southeastasia.azurecontainer.io:8000"
+friend_url = "http://virtualhoteltourservice.bug5gmc4dkc5g2d2.southeastasia.azurecontainer.io:8000/"
 
 #properti route
 #get all the properti list
