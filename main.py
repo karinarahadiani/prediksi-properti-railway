@@ -16,6 +16,7 @@ app.add_middleware(
 )
 
 # Include routers in the app
+app.include_router(frontend)
 app.include_router(properti_router)
 app.include_router(kenaikan_router)
 app.include_router(authRouter)
