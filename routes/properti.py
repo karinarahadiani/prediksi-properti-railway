@@ -125,3 +125,28 @@ async def read_kenaikan(item_id: int, jangka_tahun: int, luas_tanah: int, user: 
         return {"success": True, "message": "success", "code": 200, "response": message}
     else:
         raise HTTPException(status_code=500, detail="Invalid data: kenaikan_harga is None")
+
+@kenaikan_router.get('/lihat_properti')
+async def gambar_properti(user: UserIn = Depends(get_current_user)): 
+	data = {
+        "username": "angela",  
+        "password": "angelag20123"  
+    }
+	response = requests.post(f"{friend_url}/token", data=data)
+	token = response.json()["access_token"]
+
+	headers = {"Authorization": f"Bearer {token}"}
+	response = requests.get(f"{friend_url}/location", headers=headers)
+
+# Error handling for the HTTP request
+	try:
+		response.raise_for_status()
+		return response.json() 
+	except requests.exceptions.HTTPError as errh:
+		print(f"HTTP Error: {errh}")
+	except requests.exceptions.ConnectionError as errc:
+		print(f"Error Connecting: {errc}")
+	except requests.exceptions.Timeout as errt:
+		print(f"Timeout Error: {errt}")
+	except requests.exceptions.RequestException as err:
+		print(f"Request Exception: {err}")
