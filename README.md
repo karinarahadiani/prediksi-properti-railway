@@ -36,4 +36,4 @@ https://prediksi-properti-railway-production.up.railway.app/docs
 
 ## Demo
 
-![Demo](Screen Recording 2023-12-09 at 15.51.21.gif)
+![Demo](Demo.gif)
